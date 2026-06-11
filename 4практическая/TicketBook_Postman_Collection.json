@@ -1,0 +1,271 @@
+{
+  "info": {
+    "name": "TicketBook — Интеграционное тестирование",
+    "_postman_id": "ticketbook-testing-2025",
+    "description": "Коллекция для практической работы по тестированию ПО.\nВсе 6 тест-кейсов: TC-INT-01 ... TC-INT-06\n\nЗапустить сервер: python ticketbook_server.py\nБазовый URL: http://localhost:5000",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {"key": "base_url", "value": "http://localhost:5000"},
+    {"key": "session_token", "value": ""},
+    {"key": "booking_id", "value": ""}
+  ],
+  "item": [
+    {
+      "name": "🔧 ПОДГОТОВКА — Логин (получить токен)",
+      "request": {
+        "method": "POST",
+        "header": [{"key": "Content-Type", "value": "application/json"}],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user@test.com\",\n  \"password\": \"Test1234!\"\n}"
+        },
+        "url": {"raw": "{{base_url}}/api/auth/login", "host": ["{{base_url}}"], "path": ["api","auth","login"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "if (json.session_token) {",
+              "    pm.collectionVariables.set('session_token', json.session_token);",
+              "    console.log('Токен сохранён:', json.session_token);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-INT-01 ✅ M1→M3 Валидный токен → Создать бронь",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{session_token}}"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event_id\": 5\n}"
+        },
+        "url": {"raw": "{{base_url}}/api/booking/create", "host": ["{{base_url}}"], "path": ["api","booking","create"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "pm.test('TC-INT-01: HTTP 200', function() { pm.response.to.have.status(200); });",
+              "pm.test('TC-INT-01: booking_id присутствует', function() { pm.expect(json).to.have.property('booking_id'); });",
+              "pm.test('TC-INT-01: статус pending', function() { pm.expect(json.status).to.eql('pending'); });",
+              "if (json.booking_id) {",
+              "    pm.collectionVariables.set('booking_id', json.booking_id);",
+              "    console.log('booking_id сохранён:', json.booking_id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-INT-02 ❌ M1→M3 Невалидный токен",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer INVALID_TOKEN_12345"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event_id\": 5\n}"
+        },
+        "url": {"raw": "{{base_url}}/api/booking/create", "host": ["{{base_url}}"], "path": ["api","booking","create"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('TC-INT-02: HTTP 401 Unauthorized', function() { pm.response.to.have.status(401); });",
+              "var json = pm.response.json();",
+              "pm.test('TC-INT-02: ошибка в ответе', function() { pm.expect(json).to.have.property('error'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-INT-03 ❌ M2→M3 Несуществующий event_id=99999",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{session_token}}"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event_id\": 99999\n}"
+        },
+        "url": {"raw": "{{base_url}}/api/booking/create", "host": ["{{base_url}}"], "path": ["api","booking","create"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('TC-INT-03: HTTP 404 Not Found', function() { pm.response.to.have.status(404); });",
+              "var json = pm.response.json();",
+              "pm.test('TC-INT-03: Event not found', function() { pm.expect(json.error).to.include('not found'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-INT-04 ✅ M3→M4 Успешная оплата",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{session_token}}"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"booking_id\": {{booking_id}},\n  \"card_token\": \"tok_test_valid\"\n}"
+        },
+        "url": {"raw": "{{base_url}}/api/payment/pay", "host": ["{{base_url}}"], "path": ["api","payment","pay"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('TC-INT-04: HTTP 200', function() { pm.response.to.have.status(200); });",
+              "var json = pm.response.json();",
+              "pm.test('TC-INT-04: payment_status = success', function() { pm.expect(json.payment_status).to.eql('success'); });",
+              "pm.test('TC-INT-04: статус брони = paid', function() { pm.expect(json.status).to.eql('paid'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-INT-04b — Проверить статус брони (GET)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{session_token}}"}
+        ],
+        "url": {"raw": "{{base_url}}/api/booking/{{booking_id}}", "host": ["{{base_url}}"], "path": ["api","booking","{{booking_id}}"]}
+      }
+    },
+    {
+      "name": "TC-INT-05 ❌ M3→M4 Двойная оплата",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{session_token}}"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"booking_id\": {{booking_id}},\n  \"card_token\": \"tok_test_valid\"\n}"
+        },
+        "url": {"raw": "{{base_url}}/api/payment/pay", "host": ["{{base_url}}"], "path": ["api","payment","pay"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('TC-INT-05: HTTP 409 Conflict', function() { pm.response.to.have.status(409); });",
+              "var json = pm.response.json();",
+              "pm.test('TC-INT-05: Booking already paid', function() { pm.expect(json.error).to.include('already paid'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "🔧 ПОДГОТОВКА TC-INT-06 — Создать новую бронь",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{session_token}}"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"event_id\": 3\n}"
+        },
+        "url": {"raw": "{{base_url}}/api/booking/create", "host": ["{{base_url}}"], "path": ["api","booking","create"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "if (json.booking_id) {",
+              "    pm.collectionVariables.set('booking_id', json.booking_id);",
+              "    console.log('Новый booking_id для TC-06:', json.booking_id);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-INT-06 ❌ M4→M3 Отказ платёжной системы → статус failed",
+      "request": {
+        "method": "POST",
+        "header": [
+          {"key": "Content-Type", "value": "application/json"},
+          {"key": "Authorization", "value": "Bearer {{session_token}}"}
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"booking_id\": {{booking_id}},\n  \"card_token\": \"tok_test_decline\"\n}"
+        },
+        "url": {"raw": "{{base_url}}/api/payment/pay", "host": ["{{base_url}}"], "path": ["api","payment","pay"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('TC-INT-06: HTTP 402 Payment Required', function() { pm.response.to.have.status(402); });",
+              "var json = pm.response.json();",
+              "pm.test('TC-INT-06: payment_status = declined', function() { pm.expect(json.payment_status).to.eql('declined'); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "TC-INT-06b — Проверить статус брони = failed (GET)",
+      "request": {
+        "method": "GET",
+        "header": [
+          {"key": "Authorization", "value": "Bearer {{session_token}}"}
+        ],
+        "url": {"raw": "{{base_url}}/api/booking/{{booking_id}}", "host": ["{{base_url}}"], "path": ["api","booking","{{booking_id}}"]}
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('TC-INT-06b: статус брони = failed', function() {",
+              "    var json = pm.response.json();",
+              "    pm.expect(json.status).to.eql('failed');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
